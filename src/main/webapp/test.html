@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Insert title here</title>
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap.min.css">
+<script src="//code.jquery.com/jquery-2.1.4.js" ></script>
+<script src="//maxcdn.bootstrapcdn.com/bootstrap/3.3.4/js/bootstrap.min.js"></script>
+<script src="//cdn.jsdelivr.net/sockjs/0.3.4/sockjs.min.js"></script>
+<script src="//cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.js"></script>
+</head>
+
+<body>
+
+<div class="panel panel-default">
+  <div class="panel-heading">ログイン・ログアウト</div>
+  <div class="panel-body">
+    <form>
+		<label for="username">Username: </label><input id="username" name="username"><br/>
+		<label for="password">Password:</label><input id="password" name="password"><br/>
+		<button id="login" class="btn btn-default">Login!</button>
+		<button id="logout" class="btn btn-default">Logout!</button>
+	</form>
+  </div>
+</div>
+
+<div class="panel panel-default">
+  <div class="panel-heading">TestControllerへのアクセス</div>
+  <div class="panel-body">
+    <button id="find" class="btn btn-default">find</button>
+	<button id="findOne" class="btn btn-default">findOne</button>
+	<button id="create" class="btn btn-default">create</button>
+	<button id="error" class="btn btn-default">error</button>
+	<button id="async" class="btn btn-default">async</button>
+  </div>
+</div>
+
+<div class="panel panel-default">
+  <div class="panel-heading">stomp WebSocketへのアクセス</div>
+  <div class="panel-body">
+  	<button id="connect-btn" class="btn btn-default">接続</button>
+  	<button id="disconnect-btn" class="btn btn-default">切断</button><br>
+    <button id="no-secure-send-btn" class="btn btn-default">no-secure-送信</button>
+    <button id="secure-send-btn" class="btn btn-default">secure-送信</button>
+    <button id="user-send-btn" class="btn btn-default">個人-送信</button>
+    
+    <div id="public-log" style="height:100px; overflow:auto; background-color:#ff0000;"></div>
+    <div id="private-log" style="height:100px; overflow:auto; background-color:#00ff00;"></div>
+    <div id="stomp-log" style="height:100px; overflow:auto; background-color:#0000ff;"></div>
+  </div>
+</div>
+<script>
+var _data = {"valueInt":1,"valueBoolean":true,"valueDate":1431583886542,"valueEnum":"VALUE2"};
+var token;
+$("#find").click(function(){
+	$.get("api/test").done(function(data){
+		console.log(data);
+	}).fail(function(jqXHR, textStatus, errorThrown) {
+		console.log("fail:" + textStatus);
+	});
+});
+$("#findOne").click(function(){
+	$.get("api/test/aaa").done(function(data, textStatus, jqXHR){
+		console.log(data);
+		_data = data;
+		token = jqXHR.getResponseHeader('X-TRANSACTION-TOKEN');
+	}).fail(function(jqXHR, textStatus, errorThrown) {
+		console.log("fail:" + textStatus);
+	});
+});
+$("#create").click(function(){
+	$.ajax({
+		url:"api/test", 
+		type:"PUT",
+		headers: {'X-TRANSACTION-TOKEN': token},
+		data:JSON.stringify(_data), 
+		contentType: "application/json; charset=utf-8",
+		dataType: "json"}).fail(function(jqXHR, textStatus, errorThrown) {
+			console.log("fail:" + textStatus);
+		});
+});
+$("#error").click(function(){
+	$.get("api/test/error/error").done(function(data){
+		console.log(data);
+	}).fail(function(jqXHR, textStatus, errorThrown) {
+		console.log("fail:" + textStatus);
+	});
+});
+$("#async").click(function(){
+	$.get("api/test/async/get").done(function(data){
+		console.log(data);
+	}).fail(function(jqXHR, textStatus, errorThrown) {
+		console.log("fail:" + textStatus);
+	});
+});
+$('#login').click(function (event) {
+	event.preventDefault();
+	//var data = 'j_username=' + $('#username').val() + '&j_password=' + $('#password').val();
+	var data = {
+			username:$('#username').val(),
+			password:$('#password').val()
+	};
+	$.ajax({
+		data: data,
+		type: 'POST',
+		url: 'login'
+	}).done(function(data, textStatus, jqXHR) {
+		console.log("authentication success");
+	}).fail(function(jqXHR, textStatus, errorThrown) {
+		console.log("authentication fail");
+	});
+});
+$('#logout').click(function (event) {
+	event.preventDefault();
+	//var data = 'j_username=' + $('#username').val() + '&j_password=' + $('#password').val();
+	$.ajax({
+		type: 'GET',
+		url: 'logout'
+	}).done(function(data, textStatus, jqXHR) {
+		console.log("logout success");
+	}).fail(function(jqXHR, textStatus, errorThrown) {
+		console.log("logout fail");
+	});
+});
+
+// start stomp websocket
+var stompClient;
+$("#connect-btn").click(function(){
+	var socket = new SockJS('/notification');
+	stompClient = Stomp.over(socket);
+	stompClient.connect({}, function(frame) {
+	    console.log('Connected: ' + frame.headers['user-name']);
+	    stompClient.subscribe('/topic/result', function(test){
+	    	$("#stomp-log").prepend("<br/>").prepend(new Date().toString() + " : " + test.body);
+	    });
+	    stompClient.subscribe('/user/queue/user-test', function(test){
+	    	$("#stomp-log").prepend("<br/>").prepend(new Date().toString() + " : " + test.body);
+	    });
+	    stompClient.subscribe("/topic/price.stock.*", function(test) {
+	    	$("#public-log").prepend("<br/>").prepend(new Date().toString() + " : " + test.body);
+	    });
+	    stompClient.subscribe("/user/queue/trade", function(test) {
+	    	$("#private-log").prepend("<br/>").prepend(new Date().toString() + " : " + test.body);
+	    });
+	});
+});
+$("#disconnect-btn").click(function(){
+	if (stompClient != null) {
+        stompClient.disconnect();
+    }
+});
+$("#no-secure-send-btn").click(function(){
+	stompClient.send("/ws/no-secure-test", {}, JSON.stringify(_data));
+  	return false;
+});
+$("#secure-send-btn").click(function(){
+	stompClient.send("/ws/secure-test", {}, JSON.stringify(_data));
+  	return false;
+});
+$("#user-send-btn").click(function(){
+	stompClient.send("/ws/user-test", {}, JSON.stringify(_data));
+  	return false;
+});
+</script>
+</body>
+</html>
